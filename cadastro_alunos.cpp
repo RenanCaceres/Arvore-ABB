@@ -8,33 +8,13 @@
  * Atividade Avaliativa 3
  * Tema: Sistema de Cadastro de Alunos com Árvore Binária de Busca (ABB)
  *
- * Aluno: Renan Caceres  |  RA: 2525526
- * ============================================================
- *
- * COMO FUNCIONA UMA ÁRVORE BINÁRIA DE BUSCA (ABB)?
- *
- *   - Cada "nó" da árvore guarda os dados de um aluno.
- *   - Cada nó pode ter até dois filhos: esquerdo e direito.
- *   - Regra de ordenação (chave = nome do aluno):
- *       * Nomes menores (alfabeticamente) vão para a ESQUERDA
- *       * Nomes maiores vão para a DIREITA
- *
- *   Exemplo com os alunos do enunciado:
- *
- *              [John Smith]          <- raiz (primeiro inserido)
- *             /            \
- *      [Alice Johnson]   [Michael Brown]
- *             \
- *          [Emily Davis]
- *
- *   Percorrendo em ordem (esquerda → raiz → direita):
- *   Alice → Emily → John → Michael  ✓ (ordem alfabética!)
- * ============================================================
+ * Aluno 1: Renan Cáceres Anselmo     | RA: 2525526
+ * Aluno 2: Pedro Lucas Sales Larini  | RA: 2767147
  */
 
 #include <iostream>
 #include <string>
-#include <algorithm>   // usado apenas para transform() na comparação de nomes
+#include <algorithm>   // usado em minusculo() para comparar nomes sem case-sensitive
 
 using namespace std;
 
@@ -43,8 +23,10 @@ using namespace std;
 // ============================================================
 
 /*
- * Struct Aluno: guarda os dados de cada aluno.
- * Usamos 'string' para nome e curso, e 'int' para matrícula.
+ * Struct Aluno: dados de cada aluno cadastrado.
+ * A MATRÍCULA é usada como chave de ordenação/busca na árvore,
+ * pois é um valor numérico único — exatamente como o professor
+ * usava o "info" (int) no código base.
  */
 struct Aluno {
     int    matricula;
@@ -52,211 +34,310 @@ struct Aluno {
     string curso;
 };
 
-/*
- * Struct No (nó): cada "caixa" da árvore.
- * Guarda um aluno + ponteiros para o filho esquerdo e direito.
- * Quando não há filho, o ponteiro aponta para nullptr (vazio).
- */
-struct No {
-    Aluno aluno;   // dados do aluno neste nó
-    No*   esq;     // ponteiro para o filho à esquerda (nome menor)
-    No*   dir;     // ponteiro para o filho à direita  (nome maior)
+// Definição do nó da árvore (mesmo nome usado pelo professor: NO)
+struct NO {
+    Aluno aluno;
+    NO*   esq;
+    NO*   dir;
 };
 
+// ArvBin é um ponteiro para NO (igual ao código do professor)
+typedef NO* ArvBin;
+
 // ============================================================
-// 2. FUNÇÕES AUXILIARES
+// 2. CRIAÇÃO E LIBERAÇÃO DA ÁRVORE (iguais ao código do professor)
+// ============================================================
+
+// Cria uma árvore vazia
+ArvBin* cria_ArvBin() {
+    ArvBin* raiz = new ArvBin;
+    if (raiz != nullptr)
+        *raiz = nullptr;
+    return raiz;
+}
+
+// Libera todos os nós da árvore (percurso pós-ordem)
+void libera_NO(NO* no) {
+    if (no == nullptr)
+        return;
+    libera_NO(no->esq);
+    libera_NO(no->dir);
+    delete no;
+}
+
+// Libera a estrutura da árvore (nós + ponteiro da raiz)
+void libera_ArvBin(ArvBin* raiz) {
+    if (raiz == nullptr)
+        return;
+    libera_NO(*raiz);  // libera todos os nós
+    delete raiz;       // libera o ponteiro da raiz
+}
+
+// ============================================================
+// 3. FUNÇÃO AUXILIAR DE COMPARAÇÃO DE NOMES
 // ============================================================
 
 /*
- * Converte uma string para letras minúsculas.
- * Usamos isso para comparar nomes sem diferenciar maiúsculas de minúsculas.
- * Ex: "Alice" e "alice" são tratados como iguais.
+ * Converte string para minúsculas, usada apenas na BUSCA POR NOME
+ * (funcionalidade extra pedida no enunciado: "localizar um aluno
+ * a partir do seu nome"). A árvore continua ordenada por matrícula,
+ * então a busca por nome percorre a árvore inteira comparando nomes.
  */
 string minusculo(string s) {
     transform(s.begin(), s.end(), s.begin(), ::tolower);
     return s;
 }
 
+// ============================================================
+// 4. INSERÇÃO — COM A CORREÇÃO DE DUPLICATAS
+// ============================================================
+
 /*
- * Cria um novo nó na memória e devolve o ponteiro para ele.
- * Filhos começam como nullptr (nó folha, sem filhos ainda).
+ * Insere um novo aluno na árvore, mantendo a ordenação pela matrícula.
+ *
+ * >>> CORREÇÃO PRINCIPAL <<<
+ * Antes de criar o nó, percorremos a árvore procurando se já existe
+ * um aluno com a MESMA MATRÍCULA. Se existir, a função:
+ *   - exibe um aviso ao usuário,
+ *   - NÃO cria o nó (evita alocar memória à toa),
+ *   - retorna false (indicando que a inserção falhou).
+ *
+ * Isso resolve o problema relatado: matrícula e nome repetidos
+ * não entram mais na árvore, e o terminal não fica mais "maluco"
+ * com nós duplicados.
  */
-No* criarNo(Aluno aluno) {
-    No* novo = new No();  // aloca memória para o nó
+bool insere_ArvBin(ArvBin* raiz, Aluno aluno) {
+    if (raiz == nullptr)
+        return false;
+
+    // --- Verificação de duplicidade ANTES de criar o nó ---
+    NO* atual = *raiz;
+    while (atual != nullptr) {
+        if (aluno.matricula == atual->aluno.matricula) {
+            cout << "[ERRO] Matricula " << aluno.matricula
+                 << " ja cadastrada para \"" << atual->aluno.nome << "\"!\n";
+            return false; // cancela a inserção
+        }
+        if (minusculo(aluno.nome) == minusculo(atual->aluno.nome)) {
+            cout << "[ERRO] Ja existe um aluno chamado \"" << aluno.nome << "\"!\n";
+            return false; // cancela a inserção
+        }
+
+        // Continua descendo na árvore (mesma lógica do professor)
+        if (aluno.matricula < atual->aluno.matricula) {
+            if (atual->esq == nullptr) break; // achou o lugar, sai do while
+            atual = atual->esq;
+        } else {
+            if (atual->dir == nullptr) break; // achou o lugar, sai do while
+            atual = atual->dir;
+        }
+    }
+
+    // --- Só chega aqui se NÃO houver duplicata: cria o novo nó ---
+    NO* novo = new NO;
     novo->aluno = aluno;
     novo->esq   = nullptr;
     novo->dir   = nullptr;
-    return novo;
+
+    // Árvore vazia: o novo nó vira a raiz
+    if (*raiz == nullptr) {
+        *raiz = novo;
+        return true;
+    }
+
+    // Desce novamente até o ponto de inserção correto
+    atual = *raiz;
+    while (true) {
+        if (aluno.matricula < atual->aluno.matricula) {
+            if (atual->esq == nullptr) {
+                atual->esq = novo;
+                return true;
+            }
+            atual = atual->esq;
+        } else {
+            if (atual->dir == nullptr) {
+                atual->dir = novo;
+                return true;
+            }
+            atual = atual->dir;
+        }
+    }
 }
 
 // ============================================================
-// 3. OPERAÇÕES DA ÁRVORE
+// 5. BUSCA POR MATRÍCULA
 // ============================================================
 
 /*
- * INSERIR ALUNO
- * -------------
- * Insere um aluno na árvore mantendo a regra da ABB.
- * Função recursiva: começa na raiz e desce até encontrar
- * o lugar certo (um ponteiro nullptr).
- *
- * Parâmetros:
- *   raiz  - nó atual da recursão
- *   aluno - aluno a ser inserido
- *
- * Retorno: ponteiro para o nó atual (necessário para atualizar a árvore)
+ * Busca um aluno pela matrícula, percorrendo a árvore como uma
+ * ABB tradicional (esquerda se menor, direita se maior).
+ * Retorna o ponteiro do nó encontrado, ou nullptr se não existir.
  */
-No* inserir(No* raiz, Aluno aluno) {
-
-    // Caso base: chegamos em um espaço vazio → cria o nó aqui
-    if (raiz == nullptr) {
-        return criarNo(aluno);
-    }
-
-    // Compara o nome do novo aluno com o nome do nó atual
-    // (comparação em minúsculas para ignorar maiúsculas)
-    if (minusculo(aluno.nome) < minusculo(raiz->aluno.nome)) {
-        // Nome novo é menor → vai para a ESQUERDA
-        raiz->esq = inserir(raiz->esq, aluno);
-
-    } else if (minusculo(aluno.nome) > minusculo(raiz->aluno.nome)) {
-        // Nome novo é maior → vai para a DIREITA
-        raiz->dir = inserir(raiz->dir, aluno);
-
-    } else {
-        // Nomes iguais → não permite duplicatas
-        cout << "[AVISO] Aluno \"" << aluno.nome << "\" ja cadastrado!\n";
-    }
-
-    return raiz;  // retorna o nó atual sem modificação
-}
-
-/*
- * BUSCAR ALUNO
- * ------------
- * Procura um aluno pelo nome na árvore.
- * Também é recursiva: compara com o nó atual e decide se
- * continua pela esquerda, direita, ou achou.
- *
- * Retorno: ponteiro para o nó encontrado, ou nullptr se não existir.
- */
-No* buscar(No* raiz, const string& nome) {
-
-    // Caso base 1: chegamos em nullptr → não encontrou
-    if (raiz == nullptr) {
+NO* busca_por_matricula(ArvBin* raiz, int matricula) {
+    if (raiz == nullptr)
         return nullptr;
-    }
 
-    // Caso base 2: encontrou o aluno!
-    if (minusculo(nome) == minusculo(raiz->aluno.nome)) {
-        return raiz;
+    NO* atual = *raiz;
+    while (atual != nullptr) {
+        if (matricula == atual->aluno.matricula)
+            return atual; // encontrou!
+        else if (matricula < atual->aluno.matricula)
+            atual = atual->esq;
+        else
+            atual = atual->dir;
     }
+    return nullptr; // não encontrado
+}
 
-    // Decide em qual lado continuar a busca
-    if (minusculo(nome) < minusculo(raiz->aluno.nome)) {
-        return buscar(raiz->esq, nome);  // busca na subárvore esquerda
-    } else {
-        return buscar(raiz->dir, nome);  // busca na subárvore direita
-    }
+// ============================================================
+// 6. BUSCA POR NOME
+// ============================================================
+
+/*
+ * Como a árvore está ordenada por MATRÍCULA (não por nome),
+ * a busca por nome precisa visitar todos os nós (não há atalho).
+ * Implementada recursivamente, percorrendo a árvore inteira.
+ */
+NO* busca_por_nome(NO* no, const string& nome) {
+    if (no == nullptr)
+        return nullptr;
+
+    if (minusculo(no->aluno.nome) == minusculo(nome))
+        return no; // encontrou!
+
+    // Procura primeiro na esquerda; se não achar, procura na direita
+    NO* achadoEsq = busca_por_nome(no->esq, nome);
+    if (achadoEsq != nullptr)
+        return achadoEsq;
+
+    return busca_por_nome(no->dir, nome);
+}
+
+// ============================================================
+// 7. PERCURSO EM ORDEM (listagem)
+// ============================================================
+
+/*
+ * Percurso em ordem (esquerda -> raiz -> direita).
+ * Como a árvore é ordenada por MATRÍCULA, este percurso lista
+ * os alunos em ordem CRESCENTE DE MATRÍCULA.
+ */
+void emOrdem_porMatricula(NO* no) {
+    if (no == nullptr)
+        return;
+    emOrdem_porMatricula(no->esq);
+    cout << "Matricula: " << no->aluno.matricula
+         << " - Nome: "   << no->aluno.nome
+         << " - Curso: "  << no->aluno.curso << "\n";
+    emOrdem_porMatricula(no->dir);
 }
 
 /*
- * LISTAR EM ORDEM ALFABÉTICA (percurso In-Ordem)
- * -----------------------------------------------
- * Visita os nós na ordem: esquerda → atual → direita
- * Isso naturalmente produz os nomes em ordem alfabética crescente,
- * pois os menores estão sempre à esquerda na ABB.
- *
- * Não usa nenhum vetor ou método de ordenação externo!
- * A própria estrutura da árvore já garante a ordem.
+ * O enunciado pede a listagem em ORDEM ALFABÉTICA DE NOME.
+ * Como a árvore é ordenada por matrícula, não dá pra obter os
+ * nomes em ordem só com o percurso em ordem da árvore.
+ * Solução simples (sem usar vetor + sort pronto): construímos
+ * uma pequena lista encadeada com os alunos e ordenamos essa
+ * lista por nome usando inserção ordenada — sem usar nenhum
+ * algoritmo de ordenação pronto da biblioteca padrão.
  */
-void listarEmOrdem(No* raiz) {
+struct ItemLista {
+    Aluno aluno;
+    ItemLista* prox;
+};
 
-    // Se chegou em nullptr, não há nada para visitar → para aqui
-    if (raiz == nullptr) {
+// Insere um aluno na lista encadeada, já na posição correta (ordem alfabética)
+void inserirOrdenado(ItemLista*& inicio, Aluno aluno) {
+    ItemLista* novo = new ItemLista{aluno, nullptr};
+
+    // Lista vazia ou nome menor que o primeiro: insere na frente
+    if (inicio == nullptr || minusculo(aluno.nome) < minusculo(inicio->aluno.nome)) {
+        novo->prox = inicio;
+        inicio = novo;
         return;
     }
 
-    listarEmOrdem(raiz->esq);   // 1º: visita todos da esquerda (menores)
-
-    // 2º: exibe o aluno deste nó
-    cout << raiz->aluno.nome
-         << " - Matricula: " << raiz->aluno.matricula
-         << " - Curso: "     << raiz->aluno.curso
-         << "\n";
-
-    listarEmOrdem(raiz->dir);   // 3º: visita todos da direita (maiores)
+    // Percorre até achar a posição correta
+    ItemLista* atual = inicio;
+    while (atual->prox != nullptr && minusculo(atual->prox->aluno.nome) < minusculo(aluno.nome)) {
+        atual = atual->prox;
+    }
+    novo->prox = atual->prox;
+    atual->prox = novo;
 }
 
-/*
- * CALCULAR ALTURA DA ÁRVORE
- * --------------------------
- * A altura é o número de níveis da árvore (do maior caminho raiz→folha).
- * Calculamos recursivamente: altura = 1 + max(altura_esq, altura_dir)
- * Uma árvore vazia tem altura 0.
- */
-int altura(No* raiz) {
-    if (raiz == nullptr) {
-        return 0;
+// Percorre a árvore (qualquer ordem) e vai inserindo cada aluno na lista ordenada por nome
+void coletarParaListaOrdenada(NO* no, ItemLista*& lista) {
+    if (no == nullptr) return;
+    inserirOrdenado(lista, no->aluno);
+    coletarParaListaOrdenada(no->esq, lista);
+    coletarParaListaOrdenada(no->dir, lista);
+}
+
+// Exibe a lista encadeada (já ordenada por nome) e libera a memória dela
+void exibirEliberarLista(ItemLista* lista) {
+    while (lista != nullptr) {
+        cout << lista->aluno.nome
+             << " - Matricula: " << lista->aluno.matricula
+             << " - Curso: "     << lista->aluno.curso << "\n";
+        ItemLista* temp = lista;
+        lista = lista->prox;
+        delete temp;
     }
+}
 
-    int altEsq = altura(raiz->esq);  // altura da subárvore esquerda
-    int altDir = altura(raiz->dir);  // altura da subárvore direita
+// Função "wrapper" que junta os passos acima: monta a lista e exibe
+void listarEmOrdemAlfabetica(ArvBin* raiz) {
+    if (raiz == nullptr || *raiz == nullptr) {
+        cout << "Nenhum aluno cadastrado.\n";
+        return;
+    }
+    ItemLista* lista = nullptr;
+    coletarParaListaOrdenada(*raiz, lista);
+    exibirEliberarLista(lista);
+}
 
-    // Retorna 1 (nó atual) + o maior dos dois lados
+// ============================================================
+// 8. INFORMAÇÕES DA ÁRVORE
+// ============================================================
+
+// Conta quantos alunos (nós) existem na árvore
+int contarAlunos(NO* no) {
+    if (no == nullptr)
+        return 0;
+    return 1 + contarAlunos(no->esq) + contarAlunos(no->dir);
+}
+
+// Calcula a altura da árvore (maior caminho raiz -> folha)
+int altura(NO* no) {
+    if (no == nullptr)
+        return 0;
+    int altEsq = altura(no->esq);
+    int altDir = altura(no->dir);
     return 1 + (altEsq > altDir ? altEsq : altDir);
 }
 
-/*
- * CONTAR ALUNOS
- * -------------
- * Conta quantos nós (alunos) existem na árvore.
- * Percorre todos os nós recursivamente e soma 1 por nó.
- */
-int contarAlunos(No* raiz) {
-    if (raiz == nullptr) {
-        return 0;
-    }
-    // Conta: este nó (1) + todos da esquerda + todos da direita
-    return 1 + contarAlunos(raiz->esq) + contarAlunos(raiz->dir);
-}
-
-/*
- * LIBERAR MEMÓRIA
- * ---------------
- * Deleta todos os nós da árvore ao final do programa.
- * Usa percurso pós-ordem: deleta os filhos antes do pai.
- */
-void destruirArvore(No* raiz) {
-    if (raiz == nullptr) return;
-    destruirArvore(raiz->esq);
-    destruirArvore(raiz->dir);
-    delete raiz;
-}
-
 // ============================================================
-// 4. INTERFACE DE MENU
+// 9. INTERFACE DE MENU
 // ============================================================
 
-/* Exibe o menu de opções */
 void exibirMenu() {
     cout << "\n============================================\n";
     cout << "    CADASTRO DE ALUNOS - Arvore Binaria\n";
     cout << "============================================\n";
     cout << "  1. Inserir aluno\n";
-    cout << "  2. Buscar aluno por nome\n";
-    cout << "  3. Listar alunos em ordem alfabetica\n";
-    cout << "  4. Informacoes da arvore\n";
+    cout << "  2. Buscar aluno por matricula\n";
+    cout << "  3. Buscar aluno por nome\n";
+    cout << "  4. Listar alunos em ordem alfabetica (por nome)\n";
+    cout << "  5. Listar alunos em ordem de matricula\n";
+    cout << "  6. Informacoes da arvore\n";
     cout << "  0. Sair\n";
     cout << "============================================\n";
     cout << "  Opcao: ";
 }
 
-/*
- * Lê uma linha completa do teclado (aceita espaços).
- * O parâmetro 'limparBuffer' serve para descartar o Enter
- * que sobra depois de ler um número com cin >>.
- */
+// Lê uma linha completa (aceita espaços). 'limparBuffer' descarta
+// o Enter deixado no buffer depois de um cin >> anterior.
 string lerLinha(const string& mensagem, bool limparBuffer = false) {
     string valor;
     cout << mensagem;
@@ -266,47 +347,68 @@ string lerLinha(const string& mensagem, bool limparBuffer = false) {
 }
 
 // ============================================================
-// 5. FUNÇÃO PRINCIPAL
+// 10. FUNÇÃO PRINCIPAL
 // ============================================================
 
 int main() {
-
-    No* raiz = nullptr;  // árvore começa vazia
+    // Cria a árvore (igual ao código do professor)
+    ArvBin* raiz = cria_ArvBin();
     int opcao;
 
-    // --- Carrega os alunos do exemplo do enunciado ---
+    // --- Carrega os alunos de exemplo do enunciado ---
     cout << "\n[Carregando alunos de exemplo...]\n";
-    raiz = inserir(raiz, {101, "John Smith",    "Engenharia de Software"});
-    raiz = inserir(raiz, {102, "Alice Johnson", "Sistemas de Informacao"});
-    raiz = inserir(raiz, {103, "Michael Brown", "Ciencia da Computacao"});
-    raiz = inserir(raiz, {104, "Emily Davis",   "Engenharia de Software"});
+    insere_ArvBin(raiz, {101, "John Smith",    "Engenharia de Software"});
+    insere_ArvBin(raiz, {102, "Alice Johnson", "Sistemas de Informacao"});
+    insere_ArvBin(raiz, {103, "Michael Brown", "Ciencia da Computacao"});
+    insere_ArvBin(raiz, {104, "Emily Davis",   "Engenharia de Software"});
     cout << "[4 alunos carregados!]\n";
 
-    // --- Loop principal ---
+    // Teste de duplicata (demonstra a correção em ação)
+    cout << "\n[Testando insercao de matricula duplicada (101)...]\n";
+    insere_ArvBin(raiz, {101, "Pedro Duplicado", "Teste"});
+
     do {
         exibirMenu();
         cin >> opcao;
 
         switch (opcao) {
 
-            // ---- OPÇÃO 1: Inserir ----
+            // ---- Inserir ----
             case 1: {
                 Aluno novo;
                 novo.matricula = 0;
                 cout << "  Matricula : ";
                 cin  >> novo.matricula;
-                novo.nome  = lerLinha("  Nome     : ", true);  // true = limpa buffer
+                novo.nome  = lerLinha("  Nome     : ", true);
                 novo.curso = lerLinha("  Curso    : ");
-                raiz = inserir(raiz, novo);
-                cout << "  [OK] \"" << novo.nome << "\" inserido!\n";
+
+                if (insere_ArvBin(raiz, novo))
+                    cout << "  [OK] \"" << novo.nome << "\" inserido!\n";
+                // Se falhar, a própria função insere_ArvBin já mostrou o motivo
                 break;
             }
 
-            // ---- OPÇÃO 2: Buscar ----
+            // ---- Buscar por matrícula ----
             case 2: {
-                string nome = lerLinha("  Nome para buscar: ", true);
-                No* resultado = buscar(raiz, nome);
+                int mat;
+                cout << "  Matricula a buscar: ";
+                cin >> mat;
+                NO* resultado = busca_por_matricula(raiz, mat);
+                if (resultado != nullptr) {
+                    cout << "\n  [ENCONTRADO]\n";
+                    cout << "  Matricula : " << resultado->aluno.matricula << "\n";
+                    cout << "  Nome      : " << resultado->aluno.nome      << "\n";
+                    cout << "  Curso     : " << resultado->aluno.curso     << "\n";
+                } else {
+                    cout << "  [NAO ENCONTRADO] Nenhum aluno com essa matricula.\n";
+                }
+                break;
+            }
 
+            // ---- Buscar por nome ----
+            case 3: {
+                string nome = lerLinha("  Nome a buscar: ", true);
+                NO* resultado = busca_por_nome(*raiz, nome);
                 if (resultado != nullptr) {
                     cout << "\n  [ENCONTRADO]\n";
                     cout << "  Nome      : " << resultado->aluno.nome      << "\n";
@@ -318,23 +420,31 @@ int main() {
                 break;
             }
 
-            // ---- OPÇÃO 3: Listar em ordem ----
-            case 3: {
-                cout << "\n  --- Alunos em Ordem Alfabetica ---\n";
-                if (raiz == nullptr) {
-                    cout << "  Nenhum aluno cadastrado.\n";
-                } else {
-                    listarEmOrdem(raiz);
-                }
-                cout << "  ----------------------------------\n";
+            // ---- Listar em ordem alfabética (nome) ----
+            case 4: {
+                cout << "\n  --- Alunos em Ordem Alfabetica (por nome) ---\n";
+                listarEmOrdemAlfabetica(raiz);
+                cout << "  ----------------------------------------------\n";
                 break;
             }
 
-            // ---- OPÇÃO 4: Informações da árvore ----
-            case 4: {
+            // ---- Listar em ordem de matrícula ----
+            case 5: {
+                cout << "\n  --- Alunos em Ordem de Matricula ---\n";
+                if (raiz == nullptr || *raiz == nullptr)
+                    cout << "  Nenhum aluno cadastrado.\n";
+                else
+                    emOrdem_porMatricula(*raiz);
+                cout << "  -------------------------------------\n";
+                break;
+            }
+
+            // ---- Informações da árvore ----
+            case 6: {
+                NO* topo = (raiz != nullptr) ? *raiz : nullptr;
                 cout << "\n  --- Informacoes da Arvore ---\n";
-                cout << "  Total de alunos : " << contarAlunos(raiz) << "\n";
-                cout << "  Altura da arvore: " << altura(raiz)       << "\n";
+                cout << "  Total de alunos : " << contarAlunos(topo) << "\n";
+                cout << "  Altura da arvore: " << altura(topo)       << "\n";
                 cout << "  -----------------------------\n";
                 break;
             }
@@ -349,8 +459,8 @@ int main() {
 
     } while (opcao != 0);
 
-    // Libera toda a memória alocada antes de encerrar
-    destruirArvore(raiz);
+    // Libera toda a memória alocada (igual ao código do professor)
+    libera_ArvBin(raiz);
 
     return 0;
 }
